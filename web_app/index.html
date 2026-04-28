@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PillsBee | Your Health Companion</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="dark-mode">
+    <!-- Splash Screen -->
+    <div id="loading-overlay">
+        
+        <div style="width: 650px; height: 650px; max-width: 95vw; display: flex; justify-content: center; align-items: center; margin-bottom: 10px; position: relative;">
+            <!-- Soft glow behind the logo -->
+            <div style="position: absolute; width: 120%; height: 120%; background: radial-gradient(circle, rgba(138, 79, 255, 0.4) 0%, transparent 70%); border-radius: 50%; z-index: -1;"></div>
+            <div style="position: absolute; width: 100%; height: 100%; background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%); border-radius: 50%; z-index: -1;"></div>
+            
+            <img src="logo.png" id="splash-logo" alt="PillsBee Logo" style="width: 100%; height: 100%; object-fit: contain; mask-image: radial-gradient(circle, black 45%, transparent 75%); -webkit-mask-image: radial-gradient(circle, black 45%, transparent 75%); animation: pulse 4s infinite alternate;" onerror="this.style.display='none'; document.getElementById('fallback-logo').style.display='flex';">
+            
+            <div id="fallback-logo" style="display:none; text-align:center; color: inherit; flex-direction: column; justify-content: center; align-items: center; text-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                <div style="font-size: 8rem; margin-bottom: 10px;">🐝</div>
+                <h1 style="font-size: 4.5rem; margin: 0; font-weight: 800; letter-spacing: 2px;">PillsBee</h1>
+                <p style="font-size: 1.1rem; opacity: 0.8; margin-top: 10px; max-width: 80%;">Buzzing reminders for your better health</p>
+            </div>
+        </div>
+
+        <div style="position: absolute; top: 30px; right: 30px;">
+            <i class="fas fa-circle-half-stroke" id="splash-theme-toggle" onclick="toggleTheme()" style="cursor: pointer; font-size: 1.8rem; opacity: 0.6; transition: opacity 0.3s; color: inherit;"></i>
+        </div>
+
+        <button onclick="dismissSplash()" style="padding: 10px 25px; border-radius: 30px; font-size: 0.95rem; background: #965BFF; color: white; font-weight: 800; border: none; cursor: pointer; box-shadow: 0 10px 30px rgba(138, 79, 255, 0.3); display: flex; align-items: center; gap: 10px; transition: transform 0.2s; z-index: 10;">
+            Get Started <i class="fas fa-arrow-right"></i>
+        </button>
+        
+        <style>
+            @keyframes bounce {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-15px); }
+            }
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+        </style>
+    </div>
+
+    <div class="app-container">
+
+        <!-- Auth Section (Supabase) -->
+        <section id="auth-section">
+            <div class="auth-container">
+                <div class="logo" style="margin-bottom: 20px;">
+                    <i class="fas fa-hand-holding-medical"></i>
+                    <span>PillsBee</span>
+                </div>
+                <div class="glass card auth-form" style="text-align: center; max-width: 400px; width: 100%;">
+                    <h2 id="auth-title" style="margin-bottom: 10px;">Welcome Back!</h2>
+                    <p id="auth-subtitle" style="margin-bottom: 25px; color: var(--text-muted);">Sign in to access your buzzing reminders.</p>
+                    
+                    <form id="email-auth-form" onsubmit="handleEmailAuth(event)" style="text-align: left;">
+                        <div class="input-group">
+                            <label for="auth-email">Email</label>
+                            <input type="email" id="auth-email" placeholder="you@example.com" required>
+                        </div>
+                        <div class="input-group" style="position: relative;">
+                            <label for="auth-password">Password</label>
+                            <input type="password" id="auth-password" placeholder="••••••••" required>
+                            <i class="fas fa-eye" id="toggle-password" onclick="togglePasswordVisibility()" style="position: absolute; right: 15px; top: 40px; cursor: pointer; color: var(--text-muted); padding: 5px;"></i>
+                        </div>
+                        
+                        <div id="auth-error" style="color: var(--error); font-size: 0.85rem; margin-bottom: 15px; display: none; text-align: center; font-weight: 600;"></div>
+                        
+                        <div style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
+                            <a href="#" id="forgot-password-link" onclick="handleForgotPassword()" style="color: var(--primary-light); font-size: 0.85rem; text-decoration: none;">Forgot Password?</a>
+                        </div>
+
+                        <button type="submit" id="auth-submit-btn" class="btn btn-primary" style="margin-bottom: 15px; border-radius: 30px;">Login</button>
+                    </form>
+
+                    <div style="display: flex; align-items: center; margin: 20px 0; color: var(--text-muted); font-size: 0.9rem;">
+                        <hr style="flex: 1; border: none; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <span style="padding: 0 10px;">or</span>
+                        <hr style="flex: 1; border: none; border-top: 1px solid rgba(255,255,255,0.1);">
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="handleGoogleLogin()" style="width: 100%; border-radius: 30px; display: flex; align-items: center; justify-content: center; gap: 10px; background: white; color: black; margin-bottom: 20px;">
+                        <i class="fab fa-google" style="color: #4285F4; font-size: 1.2rem;"></i>
+                        Continue with Google
+                    </button>
+
+                    <p style="font-size: 0.9rem; color: var(--text-muted);">
+                        <span id="auth-switch-text">Don't have an account?</span> 
+                        <a href="#" onclick="toggleAuthMode(event)" style="color: var(--primary-light); font-weight: bold; text-decoration: none;" id="auth-switch-link">Sign Up</a>
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Dashboard -->
+        <section id="dashboard-section">
+            <header>
+                <div class="logo">
+                    <i class="fas fa-hand-holding-medical"></i>
+                    <span>PillsBee</span>
+                </div>
+                <div class="actions">
+                    <i class="fas fa-moon" onclick="toggleTheme()" style="cursor: pointer;"></i>
+                    <i class="fas fa-sign-out-alt" onclick="handleLogout()" style="cursor: pointer; margin-left: 16px;"></i>
+                </div>
+            </header>
+
+            <div style="padding: 0 20px 20px;">
+                <div class="greeting-container" style="margin-bottom: 30px; animation: slideIn 0.8s ease;">
+                    <h1 id="user-greeting" style="font-size: 2.2rem; margin-bottom: 5px; font-weight: 800;">Good Morning!</h1>
+                    <p id="today-date" style="color: var(--text-muted); font-size: 1.1rem; font-weight: 500;"></p>
+                </div>
+
+                <!-- Refill Alert Banner -->
+                <div id="refill-alert" class="glass card" style="display: none; background: rgba(255, 23, 68, 0.1); border-left: 4px solid var(--error); margin-bottom: 25px; animation: fadeIn 1s ease;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <i class="fas fa-exclamation-triangle" style="color: var(--error); font-size: 1.2rem;"></i>
+                        <p id="refill-alert-text" style="margin: 0; font-weight: 600;"></p>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="font-weight: 700; font-size: 1.2rem;">Today's Medicines</h3>
+                    <span style="font-size: 0.85rem; color: var(--primary); font-weight: 600; cursor: pointer;">View All</span>
+                </div>
+                
+                <div id="medicine-list"></div>
+
+                <div class="quick-actions" style="margin-top: 40px;">
+                    <h3 style="margin-bottom: 20px; font-weight: 700; font-size: 1.2rem;">Quick Actions</h3>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                        <div class="glass card action-card" onclick="switchTab('add-med')" style="text-align: center; cursor: pointer; padding: 20px 10px;">
+                            <div style="width: 45px; height: 45px; background: rgba(138, 79, 255, 0.1); border-radius: 12px; display: flex; justify-content: center; align-items: center; margin: 0 auto 10px;">
+                                <i class="fas fa-plus" style="font-size: 1.2rem; color: var(--primary);"></i>
+                            </div>
+                            <p style="font-size: 0.85rem; font-weight: 600; margin: 0;">Add</p>
+                        </div>
+                        <div class="glass card action-card" onclick="switchTab('add-med')" style="text-align: center; cursor: pointer; padding: 20px 10px;">
+                            <div style="width: 45px; height: 45px; background: rgba(138, 79, 255, 0.1); border-radius: 12px; display: flex; justify-content: center; align-items: center; margin: 0 auto 10px;">
+                                <i class="fas fa-camera" style="font-size: 1.2rem; color: var(--primary);"></i>
+                            </div>
+                            <p style="font-size: 0.85rem; font-weight: 600; margin: 0;">Scan</p>
+                        </div>
+                        <div class="glass card action-card" onclick="switchTab('chatbot')" style="text-align: center; cursor: pointer; padding: 20px 10px;">
+                            <div style="width: 45px; height: 45px; background: rgba(138, 79, 255, 0.1); border-radius: 12px; display: flex; justify-content: center; align-items: center; margin: 0 auto 10px;">
+                                <i class="fas fa-robot" style="font-size: 1.2rem; color: var(--primary);"></i>
+                            </div>
+                            <p style="font-size: 0.85rem; font-weight: 600; margin: 0;">Chat</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Chatbot Section -->
+        <section id="chatbot-section">
+            <header style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                <h2 style="font-size: 1.5rem; margin: 0;">PillsBee Assistant</h2>
+                <div style="display: flex; gap: 20px; align-items: center;">
+                    <i class="fas fa-volume-up voice-toggle-icon" onclick="toggleVoice()" style="cursor: pointer; color: var(--primary); font-size: 1.3rem;" title="Toggle Voice"></i>
+                    <i class="fas fa-times" onclick="switchTab('dashboard')" style="cursor: pointer; font-size: 1.4rem; opacity: 0.6;"></i>
+                </div>
+            </header>
+            <div class="glass card" style="padding: 10px; margin-bottom: 10px; font-size: 0.8rem; border-left: 4px solid var(--accent);">
+                ⚠️ Disclaimer: Consult your doctor before taking any medicine.
+            </div>
+            <div class="chat-messages" id="chat-messages">
+                <div class="message bot">Hello! I'm your PillsBee assistant. How can I help you?</div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Ask about a medicine..." autocomplete="off">
+                <button class="btn btn-primary" style="width: 50px;" onclick="handleChat()">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </section>
+
+        <!-- Add Medicine Section -->
+        <section id="add-med-section">
+            <header style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                <h2 style="margin:0;">Add Medicine</h2>
+                <div style="display:flex; gap:16px; align-items:center;">
+                    <i class="fas fa-camera" onclick="startCamera()" style="cursor: pointer; color: var(--primary); font-size: 1.5rem;" title="Scan Prescription"></i>
+                    <i class="fas fa-times" onclick="switchTab('dashboard')" style="cursor: pointer; font-size: 1.2rem; opacity: 0.6;"></i>
+                </div>
+            </header>
+            
+            <div id="camera-container" style="display:none; margin-bottom:20px; border-radius:20px; overflow:hidden; position:relative; background:#000;">
+                <video id="camera-stream" style="width:100%; height:auto;" autoplay playsinline></video>
+                <div style="position:absolute; bottom:20px; left:0; right:0; display:flex; justify-content:center; gap:15px;">
+                    <button class="btn glass" onclick="capturePhoto()" style="width:60px; height:60px; border-radius:50%; background:white; color:black;"><i class="fas fa-camera"></i></button>
+                    <button class="btn glass" onclick="stopCamera()" style="width:60px; height:60px; border-radius:50%; background:rgba(255,0,0,0.5); color:white;"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+
+            <input type="file" id="ocr-input" accept="image/*" style="display: none;" onchange="handleOCR(this)">
+            
+            <div id="ocr-status" style="display:none; margin-bottom:16px; color:var(--primary); font-size:0.85rem; text-align:center;">
+                <i class="fas fa-spinner fa-spin"></i> Analyzing prescription...
+            </div>
+
+            <div class="input-group">
+                <label>Medicine Name</label>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px;">e.g., Dolo 650</p>
+                <input type="text" id="med-name" placeholder="Enter medicine name" autocomplete="off">
+            </div>
+
+            <div class="input-group">
+                <label>Dosage</label>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px;">e.g., 500 mg</p>
+                <input type="text" id="med-dosage" placeholder="e.g. 500 mg" autocomplete="off">
+            </div>
+
+            <div class="input-group">
+                <label>Frequency</label>
+                <select id="med-frequency" class="glass" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:transparent; color:inherit; outline:none;">
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="needed">As Needed</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <label style="margin:0;">Reminder Times</label>
+                    <button class="btn glass" onclick="addTimeSlot()" style="width:auto; padding:4px 12px; font-size:0.8rem;">+ Add Time</button>
+                </div>
+                <div id="time-slots-container">
+                    <input type="time" class="med-time-input" style="margin-bottom:8px;">
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                <div class="input-group">
+                    <label>Total Quantity</label>
+                    <input type="number" id="med-qty" placeholder="Total tablets" autocomplete="off">
+                </div>
+                <div class="input-group">
+                    <label>Expiry Date</label>
+                    <input type="date" id="med-expiry">
+                </div>
+            </div>
+
+            <div class="card glass" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; padding:15px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <i class="fas fa-volume-up" style="color:var(--primary);"></i>
+                    <span style="font-weight:600; font-size:0.9rem;">Voice Reminder</span>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="med-voice-toggle" checked>
+                    <span class="slider round"></span>
+                </label>
+            </div>
+
+            <div style="display:flex; gap:15px;">
+                <button class="btn glass" onclick="switchTab('dashboard')" style="flex:1;">Cancel</button>
+                <button class="btn btn-primary" onclick="handleAddMedicine()" style="flex:2;">Save Medicine</button>
+            </div>
+        </section>
+
+        <!-- OCR Results Modal -->
+        <div id="ocr-modal" class="glass" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:90%; max-width:450px; padding:30px; border-radius:24px; z-index:4000;">
+            <header style="padding:0; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">Scan Result</h3>
+                <i class="fas fa-times" onclick="closeOCRModal()" style="cursor: pointer;"></i>
+            </header>
+            <div id="ocr-captured-image" style="width:100%; height:150px; background:#000; border-radius:12px; margin-bottom:20px; background-size:cover; background-position:center;"></div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">Extracted Text:</p>
+            <div id="ocr-text-result" style="background:rgba(255,255,255,0.05); padding:15px; border-radius:12px; font-size:0.9rem; max-height:120px; overflow-y:auto; margin-bottom:20px; border:1px solid rgba(255,255,255,0.1);"></div>
+            <button class="btn btn-primary" onclick="useOCRData()">Use This Data</button>
+        </div>
+
+        <!-- History Section -->
+        <section id="history-section">
+            <header style="display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 20px 0; margin-bottom: 30px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <h2 style="margin:0; font-size: 1.8rem; font-weight: 800;">History Archive</h2>
+                    <i class="fas fa-times" onclick="switchTab('dashboard')" style="cursor: pointer; font-size: 1.4rem; opacity: 0.6;"></i>
+                </div>
+                
+                <!-- Premium Tab Switcher -->
+                <div class="glass" style="display: inline-flex; padding: 8px; border-radius: 20px; gap: 8px; background: rgba(138, 79, 255, 0.05); border: 1px solid rgba(138, 79, 255, 0.1);">
+                    <button id="hist-tab-pills" class="btn" style="width: 140px; height: 45px; background: var(--primary); color: white; border-radius: 12px; font-weight: 700; font-size: 0.9rem;" onclick="switchHistoryTab('pills')">Pills</button>
+                    <button id="hist-tab-chats" class="btn glass" style="width: 140px; height: 45px; background: transparent; color: inherit; border-radius: 12px; font-weight: 700; font-size: 0.9rem; border:none;" onclick="switchHistoryTab('chats')">Chats</button>
+                </div>
+            </header>
+            
+            <div id="pills-history-view">
+                <div id="history-list" class="history-list"></div>
+            </div>
+            
+            <div id="chats-history-view" style="display: none;">
+                <div id="chat-archive-list" class="history-list"></div>
+            </div>
+        </section>
+
+        <!-- Settings Section -->
+        <section id="settings-section">
+            <header style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+                <h2 style="margin:0;">Settings</h2>
+                <i class="fas fa-times" onclick="switchTab('dashboard')" style="cursor: pointer; font-size: 1.2rem; opacity: 0.6;"></i>
+            </header>
+            <div class="card glass" style="margin-top: 20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <span>Dark Mode</span>
+                    <button class="btn glass" onclick="toggleTheme()" style="width:auto; padding:8px 16px;">Toggle</button>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <span>Voice Alerts</span>
+                    <span style="color:var(--success);">Enabled</span>
+                </div>
+                <hr style="opacity:0.1; margin:20px 0;">
+                <button class="btn glass" onclick="handleLogout()" style="background:var(--error); color:white; border:none;">Logout</button>
+            </div>
+        </section>
+
+        <!-- Medicine Info Section (Full Screen) -->
+        <section id="med-info-section">
+            <header style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; margin-bottom: 20px;">
+                <h2 id="info-med-name" style="margin:0; font-size:1.8rem; font-weight:800;">Medicine Details</h2>
+                <div style="display: flex; gap: 20px; align-items: center;">
+                    <i class="fas fa-volume-up voice-toggle-icon" onclick="toggleVoice()" style="cursor: pointer; color: var(--primary); font-size: 1.5rem;" title="Toggle Voice"></i>
+                    <i class="fas fa-times" onclick="switchTab('dashboard')" style="cursor: pointer; font-size:1.4rem; opacity:0.6;"></i>
+                </div>
+            </header>
+            
+            <div style="display:flex; flex-direction:column; gap:20px;">
+                <!-- Usage Card -->
+                <div class="card glass" style="padding:20px; border-radius:24px;">
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px; color:var(--primary);">
+                        <i class="fas fa-info-circle" style="font-size:1.2rem;"></i>
+                        <h4 style="margin:0; font-size:1.1rem;">Usage</h4>
+                    </div>
+                    <p id="med-usage-text" style="font-size:0.95rem; margin:0; line-height:1.6; opacity:0.9;">Fetching details...</p>
+                </div>
+
+                <!-- Dosage Card -->
+                <div class="card glass" style="padding:20px; border-radius:24px;">
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px; color:#ff9800;">
+                        <i class="fas fa-pills" style="font-size:1.2rem;"></i>
+                        <h4 style="margin:0; font-size:1.1rem;">Dosage Instructions</h4>
+                    </div>
+                    <p id="med-dosage-text" style="font-size:0.95rem; margin:0; line-height:1.6; opacity:0.9;">...</p>
+                </div>
+
+                <!-- Side Effects Card -->
+                <div class="card glass" style="padding:20px; border-radius:24px;">
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px; color:var(--error);">
+                        <i class="fas fa-exclamation-triangle" style="font-size:1.2rem;"></i>
+                        <h4 style="margin:0; font-size:1.1rem;">Side Effects</h4>
+                    </div>
+                    <p id="med-side-effects-text" style="font-size:0.95rem; margin:0; line-height:1.6; opacity:0.9;">...</p>
+                </div>
+
+                <!-- Timing Card -->
+                <div class="card glass" style="padding:20px; border-radius:24px;">
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px; color:#4caf50;">
+                        <i class="fas fa-clock" style="font-size:1.2rem;"></i>
+                        <h4 style="margin:0; font-size:1.1rem;">When to Take</h4>
+                    </div>
+                    <p id="med-timing-text" style="font-size:0.95rem; margin:0; line-height:1.6; opacity:0.9;">...</p>
+                </div>
+
+                <button class="btn btn-primary" id="ask-ai-med-btn" style="margin-top:10px; height:60px; border-radius:20px; font-size:1rem; font-weight:700; display:flex; justify-content:center; align-items:center; gap:12px;">
+                    <i class="fas fa-robot"></i> Ask Chatbot about this medicine
+                </button>
+            </div>
+        </section>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav glass" id="main-nav" style="display: none;">
+            <div class="nav-item active" onclick="switchTab('dashboard')"><i class="fas fa-home"></i></div>
+            <div class="nav-item" onclick="switchTab('history')"><i class="fas fa-history"></i></div>
+            <div class="nav-item" onclick="switchTab('add-med')"><i class="fas fa-plus-circle" style="font-size: 2rem;"></i></div>
+            <div class="nav-item" onclick="switchTab('chatbot')"><i class="fas fa-comment-dots"></i></div>
+            <div class="nav-item" onclick="switchTab('settings')"><i class="fas fa-cog"></i></div>
+        </nav>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
