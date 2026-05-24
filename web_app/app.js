@@ -7,6 +7,8 @@ let splashCompleted = false;
 let currentUser = null;
 let isForgotPasswordMode = false;
 let isRecoveryMode = false;
+let ocrData = null;
+let ocrQueue = [];
 
 // Toast Notification System
 function showToast(message, type = 'success') {
@@ -995,17 +997,19 @@ async function processOCR(file) {
                     content: [
                         {
                             type: 'text',
-                            text: `You are a medical prescription parser. Analyze this prescription image and extract medicine details. 
-                            Return ONLY a valid JSON object with this exact structure (no extra text):
-                            {
-                                "name": "Medicine name (e.g. Paracetamol 500mg)",
-                                "dosage": "Dosage (e.g. 500mg, 1 tablet)",
-                                "frequency": "daily or weekly or needed",
-                                "times": ["HH:MM", "HH:MM"],
-                                "quantity": 30,
-                                "notes": "Any important notes or instructions from the prescription"
-                            }
-                            If you cannot read the prescription clearly, make your best guess for medicine name and set other fields to empty strings or defaults.
+                            text: `You are a medical prescription parser. Analyze this prescription image and extract ALL medicine details. 
+                            Return ONLY a valid JSON ARRAY containing objects with this exact structure (no extra text):
+                            [
+                                {
+                                    "name": "Medicine name (e.g. Paracetamol 500mg)",
+                                    "dosage": "Dosage (e.g. 500mg, 1 tablet)",
+                                    "frequency": "daily or weekly or needed",
+                                    "times": ["HH:MM", "HH:MM"],
+                                    "quantity": 30,
+                                    "notes": "Any important notes or instructions"
+                                }
+                            ]
+                            If you cannot read the prescription clearly, make your best guess for medicine names and set other fields to empty strings or defaults.
                             For times, convert "morning" to "08:00", "afternoon" to "13:00", "evening" to "18:00", "night" to "21:00".
                             For frequency: use "daily" for once/twice/thrice daily, "weekly" for weekly, "needed" for as-needed.`
                         },
@@ -1029,20 +1033,22 @@ async function processOCR(file) {
         const data = await response.json();
         const rawText = data.choices[0].message.content;
 
-        // Parse the JSON from AI response
-        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('Could not parse AI response');
-        ocrData = JSON.parse(jsonMatch[0]);
+        // Parse the JSON array from AI response
+        const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) throw new Error('Could not parse AI response as a JSON array');
+        ocrQueue = JSON.parse(jsonMatch[0]);
+
+        if (ocrQueue.length === 0) throw new Error('No medicines detected.');
 
         // Build a readable summary for the modal
-        const summary = `📋 Medicine: ${ocrData.name || 'Unknown'}
-💊 Dosage: ${ocrData.dosage || 'Not specified'}
-🔁 Frequency: ${ocrData.frequency || 'daily'}
-⏰ Times: ${(ocrData.times || []).join(', ') || 'Not specified'}
-📦 Quantity: ${ocrData.quantity || 'Not specified'}
-📝 Notes: ${ocrData.notes || 'None'}`;
+        let summary = `<strong>Found ${ocrQueue.length} medicine(s):</strong><br><br>`;
+        ocrQueue.forEach((med, i) => {
+            summary += `${i + 1}. ${med.name || 'Unknown'} (${med.dosage || 'Not specified'})<br>`;
+        });
 
-        document.getElementById('ocr-text-result').innerText = summary;
+        document.getElementById('ocr-text-result').innerHTML = summary;
+        document.getElementById('ocr-submit-btn').innerHTML = `<i class="fas fa-magic" style="margin-right:8px;"></i>Auto-Fill (1 of ${ocrQueue.length})`;
+        
         document.getElementById('ocr-modal').style.display = 'block';
         document.getElementById('ocr-backdrop').style.display = 'block';
 
@@ -1055,13 +1061,18 @@ async function processOCR(file) {
 }
 
 function useOCRData() {
-    if (!ocrData) return;
+    if (!ocrQueue || ocrQueue.length === 0) return;
+
+    // Pop the first medicine from the queue
+    ocrData = ocrQueue.shift();
 
     // Auto-fill medicine name
     if (ocrData.name) document.getElementById('med-name').value = ocrData.name;
+    else document.getElementById('med-name').value = '';
 
     // Auto-fill dosage
     if (ocrData.dosage) document.getElementById('med-dosage').value = ocrData.dosage;
+    else document.getElementById('med-dosage').value = '';
 
     // Auto-fill frequency
     if (ocrData.frequency) {
@@ -1071,9 +1082,9 @@ function useOCRData() {
     }
 
     // Auto-fill reminder times
+    const container = document.getElementById('time-slots-container');
+    container.innerHTML = '';
     if (ocrData.times && ocrData.times.length > 0) {
-        const container = document.getElementById('time-slots-container');
-        container.innerHTML = '';
         ocrData.times.forEach(t => {
             const input = document.createElement('input');
             input.type = 'time';
@@ -1082,12 +1093,21 @@ function useOCRData() {
             input.value = t;
             container.appendChild(input);
         });
+    } else {
+        addTimeSlot(); // Add at least one empty slot
     }
 
     // Auto-fill quantity
     if (ocrData.quantity) document.getElementById('med-qty').value = ocrData.quantity;
+    else document.getElementById('med-qty').value = '';
 
-    showToast('Prescription data filled in! Please review before saving.', 'success');
+    const remaining = ocrQueue.length;
+    if (remaining > 0) {
+        showToast(`Prescription filled. Review and save, ${remaining} more to go!`, 'info');
+    } else {
+        showToast('Prescription data filled in! Please review before saving.', 'success');
+    }
+    
     closeOCRModal();
 }
 
@@ -1148,12 +1168,21 @@ async function handleAddMedicine() {
 
         if (error) throw error;
 
-        switchTab('dashboard');
-        loadMedicines(currentUser.id);
         // Reset form
         document.getElementById('med-name').value = '';
         document.getElementById('med-dosage').value = '';
-        document.getElementById('time-slots-container').innerHTML = '<input type="time" class="med-time-input glass" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); margin-bottom:8px; background:transparent; color:inherit;">';
+        document.getElementById('med-qty').value = '';
+        document.getElementById('med-expiry').value = '';
+        document.getElementById('time-slots-container').innerHTML = '';
+        addTimeSlot();
+
+        if (ocrQueue && ocrQueue.length > 0) {
+            useOCRData();
+        } else {
+            showToast('Medicine added successfully', 'success');
+            switchTab('dashboard');
+            loadMedicines(currentUser.id);
+        }
     } catch (error) {
         showToast('Error: ' + error.message, 'error');
     }
