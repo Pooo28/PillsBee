@@ -965,31 +965,90 @@ async function handleOCR(input) {
 
 async function processOCR(file) {
     const status = document.getElementById('ocr-status');
+    status.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing prescription with AI...';
     status.style.display = 'block';
 
     try {
-        if (typeof Tesseract === 'undefined') {
-            await new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
+        // Convert image to base64
+        const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => resolve(e.target.result.split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+
+        // Show image preview in modal
+        const reader2 = new FileReader();
+        reader2.onload = e => {
+            document.getElementById('ocr-captured-image').style.backgroundImage = `url(${e.target.result})`;
+        };
+        reader2.readAsDataURL(file);
+
+        // Call Groq Vision via our secure serverless proxy
+        const response = await fetch('/api/groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+                messages: [{
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'text',
+                            text: `You are a medical prescription parser. Analyze this prescription image and extract medicine details. 
+                            Return ONLY a valid JSON object with this exact structure (no extra text):
+                            {
+                                "name": "Medicine name (e.g. Paracetamol 500mg)",
+                                "dosage": "Dosage (e.g. 500mg, 1 tablet)",
+                                "frequency": "daily or weekly or needed",
+                                "times": ["HH:MM", "HH:MM"],
+                                "quantity": 30,
+                                "notes": "Any important notes or instructions from the prescription"
+                            }
+                            If you cannot read the prescription clearly, make your best guess for medicine name and set other fields to empty strings or defaults.
+                            For times, convert "morning" to "08:00", "afternoon" to "13:00", "evening" to "18:00", "night" to "21:00".
+                            For frequency: use "daily" for once/twice/thrice daily, "weekly" for weekly, "needed" for as-needed.`
+                        },
+                        {
+                            type: 'image_url',
+                            image_url: {
+                                url: `data:${file.type};base64,${base64}`
+                            }
+                        }
+                    ]
+                }],
+                temperature: 0.1
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error?.message || 'AI vision request failed');
         }
 
-        const result = await Tesseract.recognize(file, 'eng');
-        ocrData = result.data.text;
+        const data = await response.json();
+        const rawText = data.choices[0].message.content;
 
-        document.getElementById('ocr-text-result').innerText = ocrData;
-        const reader = new FileReader();
-        reader.onload = e => document.getElementById('ocr-captured-image').style.backgroundImage = `url(${e.target.result})`;
-        reader.readAsDataURL(file);
+        // Parse the JSON from AI response
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('Could not parse AI response');
+        ocrData = JSON.parse(jsonMatch[0]);
 
+        // Build a readable summary for the modal
+        const summary = `📋 Medicine: ${ocrData.name || 'Unknown'}
+💊 Dosage: ${ocrData.dosage || 'Not specified'}
+🔁 Frequency: ${ocrData.frequency || 'daily'}
+⏰ Times: ${(ocrData.times || []).join(', ') || 'Not specified'}
+📦 Quantity: ${ocrData.quantity || 'Not specified'}
+📝 Notes: ${ocrData.notes || 'None'}`;
+
+        document.getElementById('ocr-text-result').innerText = summary;
         document.getElementById('ocr-modal').style.display = 'block';
+        document.getElementById('ocr-backdrop').style.display = 'block';
+
     } catch (e) {
         console.error('OCR Error:', e);
-        showToast('Failed to scan prescription.', 'error');
+        showToast('Failed to analyze prescription: ' + e.message, 'error');
     } finally {
         status.style.display = 'none';
     }
@@ -997,18 +1056,47 @@ async function processOCR(file) {
 
 function useOCRData() {
     if (!ocrData) return;
-    const lines = ocrData.split('\n').filter(l => l.trim().length > 3);
-    if (lines.length > 0) {
-        document.getElementById('med-name').value = lines[0].trim();
-        const dosageMatch = ocrData.match(/\d+\s*(mg|g|ml|tab|pill|mcg)/i);
-        if (dosageMatch) document.getElementById('med-dosage').value = dosageMatch[0];
+
+    // Auto-fill medicine name
+    if (ocrData.name) document.getElementById('med-name').value = ocrData.name;
+
+    // Auto-fill dosage
+    if (ocrData.dosage) document.getElementById('med-dosage').value = ocrData.dosage;
+
+    // Auto-fill frequency
+    if (ocrData.frequency) {
+        const freq = document.getElementById('med-frequency');
+        const validValues = ['daily', 'weekly', 'needed'];
+        if (validValues.includes(ocrData.frequency)) freq.value = ocrData.frequency;
     }
+
+    // Auto-fill reminder times
+    if (ocrData.times && ocrData.times.length > 0) {
+        const container = document.getElementById('time-slots-container');
+        container.innerHTML = '';
+        ocrData.times.forEach(t => {
+            const input = document.createElement('input');
+            input.type = 'time';
+            input.className = 'med-time-input glass';
+            input.style.cssText = 'width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); margin-bottom:8px; background:transparent; color:inherit;';
+            input.value = t;
+            container.appendChild(input);
+        });
+    }
+
+    // Auto-fill quantity
+    if (ocrData.quantity) document.getElementById('med-qty').value = ocrData.quantity;
+
+    showToast('Prescription data filled in! Please review before saving.', 'success');
     closeOCRModal();
 }
 
 function closeOCRModal() {
     document.getElementById('ocr-modal').style.display = 'none';
+    const backdrop = document.getElementById('ocr-backdrop');
+    if (backdrop) backdrop.style.display = 'none';
 }
+
 
 async function deleteMedicine(medId) {
     if (!confirm('Are you sure you want to delete this medicine? This will remove all its records.')) return;

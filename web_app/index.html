@@ -266,16 +266,25 @@
             </div>
         </section>
 
+        <!-- OCR Results Modal Backdrop -->
+        <div id="ocr-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:3999;" onclick="closeOCRModal()"></div>
+
         <!-- OCR Results Modal -->
-        <div id="ocr-modal" class="glass" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:90%; max-width:450px; padding:30px; border-radius:24px; z-index:4000;">
+        <div id="ocr-modal" class="glass" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:90%; max-width:460px; padding:30px; border-radius:24px; z-index:4000;">
             <header style="padding:0; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center;">
-                <h3 style="margin:0;">Scan Result</h3>
-                <i class="fas fa-times" onclick="closeOCRModal()" style="cursor: pointer;"></i>
+                <div>
+                    <h3 style="margin:0;">🤖 AI Prescription Scan</h3>
+                    <p style="margin:4px 0 0; font-size:0.8rem; color:var(--text-muted);">Review the details before filling</p>
+                </div>
+                <i class="fas fa-times" onclick="closeOCRModal()" style="cursor: pointer; font-size:1.3rem; opacity:0.6;"></i>
             </header>
-            <div id="ocr-captured-image" style="width:100%; height:150px; background:#000; border-radius:12px; margin-bottom:20px; background-size:cover; background-position:center;"></div>
-            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:10px;">Extracted Text:</p>
-            <div id="ocr-text-result" style="background:rgba(255,255,255,0.05); padding:15px; border-radius:12px; font-size:0.9rem; max-height:120px; overflow-y:auto; margin-bottom:20px; border:1px solid rgba(255,255,255,0.1);"></div>
-            <button class="btn btn-primary" onclick="useOCRData()">Use This Data</button>
+            <div id="ocr-captured-image" style="width:100%; height:160px; background:#111; border-radius:14px; margin-bottom:16px; background-size:cover; background-position:center; border:1px solid rgba(255,255,255,0.08);"></div>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Extracted Details</p>
+            <div id="ocr-text-result" style="background:rgba(255,255,255,0.05); padding:15px; border-radius:12px; font-size:0.9rem; line-height:1.7; max-height:150px; overflow-y:auto; margin-bottom:20px; border:1px solid rgba(255,255,255,0.1); white-space:pre-line;"></div>
+            <div style="display:flex; gap:10px;">
+                <button class="btn glass" onclick="closeOCRModal()" style="flex:1;">Cancel</button>
+                <button class="btn btn-primary" onclick="useOCRData()" style="flex:2;"><i class="fas fa-magic" style="margin-right:8px;"></i>Auto-Fill Form</button>
+            </div>
         </div>
 
         <!-- History Section -->
