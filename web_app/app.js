@@ -359,6 +359,25 @@ async function handleEmailAuth(e) {
     }
 }
 
+async function handleGoogleLogin() {
+    try {
+        const { data, error } = await db.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: window.location.origin
+            }
+        });
+        if (error) throw error;
+    } catch (err) {
+        console.error('Google login error:', err);
+        const errorDiv = document.getElementById('auth-error');
+        if (errorDiv) {
+            errorDiv.innerText = err.message;
+            errorDiv.style.display = 'block';
+        }
+    }
+}
+
 function handleForgotPassword(e) {
     if (e) e.preventDefault();
     isForgotPasswordMode = true;
@@ -908,7 +927,6 @@ function showNotification(med) {
 }
 
 // --- OCR & Camera Logic ---
-let ocrData = null;
 let stream = null;
 
 function addTimeSlot() {
