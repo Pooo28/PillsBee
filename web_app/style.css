@@ -555,7 +555,8 @@ input:checked + .slider:before {
     .app-container:has(#add-med-section.active),
     .app-container:has(#history-section.active),
     .app-container:has(#settings-section.active),
-    .app-container:has(#med-info-section.active) {
+    .app-container:has(#med-info-section.active),
+    .app-container:has(#buy-section.active) {
         padding-left: 100px;
     }
     

@@ -429,7 +429,7 @@ initApp();
 
 // --- UI Functions ---
 function switchTab(tabId) {
-    const sections = ['splash-section', 'auth-section', 'dashboard-section', 'chatbot-section', 'add-med-section', 'history-section', 'settings-section', 'med-info-section'];
+    const sections = ['splash-section', 'auth-section', 'dashboard-section', 'chatbot-section', 'add-med-section', 'history-section', 'settings-section', 'med-info-section', 'buy-section'];
     sections.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.remove('active');
@@ -442,19 +442,133 @@ function switchTab(tabId) {
     navItems.forEach(item => item.classList.remove('active'));
     if (tabId === 'dashboard') {
         navItems[0].classList.add('active');
-        if (currentUser) loadMedicines(currentUser.id); // Aggressive refresh on tab switch
+        if (currentUser) loadMedicines(currentUser.id);
     }
     if (tabId === 'history') {
         navItems[1].classList.add('active');
-        switchHistoryTab('pills'); // Default
-        loadHistory(); // Aggressive refresh
+        switchHistoryTab('pills');
+        loadHistory();
     }
     if (tabId === 'add-med') navItems[2].classList.add('active');
     if (tabId === 'chatbot') {
         navItems[3].classList.add('active');
         loadChatHistory();
     }
-    if (tabId === 'settings') navItems[4].classList.add('active');
+    if (tabId === 'buy') {
+        navItems[4].classList.add('active');
+        renderPharmacies();
+    }
+    if (tabId === 'settings') navItems[5].classList.add('active');
+}
+
+// --- Buy Medicine Pharmacy Data ---
+const pharmacies = [
+    {
+        name: 'PharmEasy',
+        tagline: 'India\'s Most Trusted Online Pharmacy',
+        icon: 'fa-prescription-bottle-alt',
+        color: '#5e72e4',
+        discount: 'Up to 25% Off',
+        features: ['Free delivery above ₹299', 'Genuine medicines', 'NABL certified labs'],
+        url: 'https://pharmeasy.in',
+        search: 'https://pharmeasy.in/search/all?name='
+    },
+    {
+        name: '1mg (Tata Health)',
+        tagline: 'Medicines, Lab Tests & Doctors',
+        icon: 'fa-clinic-medical',
+        color: '#e91e8c',
+        discount: 'Up to 20% Off',
+        features: ['Doctor consultations', 'Lab test bookings', 'Health articles'],
+        url: 'https://www.1mg.com',
+        search: 'https://www.1mg.com/search/all?name='
+    },
+    {
+        name: 'Netmeds',
+        tagline: 'India Ki Pharmacy',
+        icon: 'fa-heartbeat',
+        color: '#00897b',
+        discount: 'Up to 20% Off',
+        features: ['Reliance brand', 'Pan-India delivery', 'OTC & Rx medicines'],
+        url: 'https://www.netmeds.com',
+        search: 'https://www.netmeds.com/catalogsearch/result?q='
+    },
+    {
+        name: 'Apollo Pharmacy',
+        tagline: 'Health is Life',
+        icon: 'fa-hospital',
+        color: '#ef5350',
+        discount: 'Members save more',
+        features: ['Apollo trusted brand', 'Store pickup available', '24/7 support'],
+        url: 'https://www.apollopharmacy.in',
+        search: 'https://www.apollopharmacy.in/search/'
+    },
+    {
+        name: 'MedPlus',
+        tagline: 'Your Neighbourhood Pharmacy Online',
+        icon: 'fa-pills',
+        color: '#8a4fff',
+        discount: 'Loyalty rewards',
+        features: ['4500+ stores', 'Same day delivery', 'Generic medicines'],
+        url: 'https://www.medplusmart.com',
+        search: 'https://www.medplusmart.com/search?searchString='
+    },
+    {
+        name: 'Amazon Health',
+        tagline: 'Medicines Delivered Fast',
+        icon: 'fa-box',
+        color: '#ff9900',
+        discount: 'Prime discounts',
+        features: ['Prime delivery', 'Wide range', 'Easy returns'],
+        url: 'https://www.amazon.in/health',
+        search: 'https://www.amazon.in/s?k='
+    }
+];
+
+function renderPharmacies(list = pharmacies) {
+    const grid = document.getElementById('pharmacy-grid');
+    if (!grid) return;
+
+    const searchQuery = document.getElementById('buy-search')?.value.trim() || '';
+
+    if (list.length === 0) {
+        grid.innerHTML = `<div class="glass card" style="text-align:center; padding:40px 20px;">
+            <i class="fas fa-search" style="font-size:2.5rem; color:var(--text-muted); opacity:0.3; margin-bottom:15px;"></i>
+            <p style="color:var(--text-muted);">No pharmacy found. Try a different search.</p>
+        </div>`;
+        return;
+    }
+
+    grid.innerHTML = list.map(p => `
+        <div class="card glass" style="border-radius:24px; padding:20px; transition:all 0.3s ease; border:1px solid rgba(255,255,255,0.08);" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+                <div style="width:56px; height:56px; border-radius:18px; background:${p.color}20; display:flex; justify-content:center; align-items:center; flex-shrink:0;">
+                    <i class="fas ${p.icon}" style="font-size:1.5rem; color:${p.color};"></i>
+                </div>
+                <div style="flex:1; min-width:0;">
+                    <h3 style="margin:0; font-size:1.1rem; font-weight:800;">${p.name}</h3>
+                    <p style="margin:3px 0 0; font-size:0.82rem; color:var(--text-muted);">${p.tagline}</p>
+                </div>
+                <span style="background:${p.color}20; color:${p.color}; font-size:0.75rem; font-weight:700; padding:5px 12px; border-radius:20px; white-space:nowrap;">${p.discount}</span>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;">
+                ${p.features.map(f => `<span style="font-size:0.75rem; color:var(--text-muted); background:rgba(255,255,255,0.05); padding:4px 10px; border-radius:20px; border:1px solid rgba(255,255,255,0.08);"><i class="fas fa-check" style="color:var(--success); margin-right:4px;"></i>${f}</span>`).join('')}
+            </div>
+            <div style="display:flex; gap:10px;">
+                ${searchQuery ? `
+                <a href="${p.search}${encodeURIComponent(searchQuery)}" target="_blank" rel="noopener" style="flex:2; text-decoration:none;">
+                    <button class="btn btn-primary" style="width:100%; border-radius:14px; font-size:0.9rem; height:46px; background:${p.color};"><i class="fas fa-search" style="margin-right:8px;"></i>Search "${searchQuery}"</button>
+                </a>` : ''}
+                <a href="${p.url}" target="_blank" rel="noopener" style="flex:1; text-decoration:none;">
+                    <button class="btn glass" style="width:100%; border-radius:14px; font-size:0.9rem; height:46px;"><i class="fas fa-external-link-alt" style="margin-right:8px;"></i>Visit</button>
+                </a>
+            </div>
+        </div>
+    `).join('');
+}
+
+function filterPharmacies() {
+    renderPharmacies(pharmacies);
 }
 
 async function showMedicineInfo(medId) {
