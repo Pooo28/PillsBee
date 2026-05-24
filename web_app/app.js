@@ -6,7 +6,35 @@ const GROQ_API_KEY = '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';
 // Global State
 let splashCompleted = false;
 let currentUser = null;
+let isForgotPasswordMode = false;
+let isRecoveryMode = false;
 
+// Toast Notification System
+function showToast(message, type = 'success') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    let iconClass = 'fa-check-circle';
+    if (type === 'error') iconClass = 'fa-exclamation-circle';
+    if (type === 'info') iconClass = 'fa-info-circle';
+    
+    toast.innerHTML = `<i class="fas ${iconClass}"></i><span>${message}</span>`;
+    
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'toastFadeOut 0.3s forwards';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
 // FAILSAFE: Define dismissSplash at the very top
 function dismissSplash() {
     console.log('Get Started clicked - Dismissing splash...');
@@ -124,9 +152,23 @@ async function initApp() {
     const { data: { session } } = await db.auth.getSession();
     currentUser = session ? session.user : null;
 
-    db.auth.onAuthStateChange((_event, session) => {
+    db.auth.onAuthStateChange((event, session) => {
         currentUser = session ? session.user : null;
-        if (splashCompleted) updateUI(currentUser);
+        if (event === 'PASSWORD_RECOVERY') {
+            console.log('Password recovery event detected!');
+            isRecoveryMode = true;
+            splashCompleted = true; // Dismiss splash since we are recovering
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.style.opacity = '0';
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 500);
+            }
+            showRecoveryUI();
+        } else {
+            if (splashCompleted) updateUI(currentUser);
+        }
     });
 
     // Add Enter key listener for chat
@@ -182,7 +224,18 @@ let isLoginMode = true;
 
 function toggleAuthMode(e) {
     if (e) e.preventDefault();
-    isLoginMode = !isLoginMode;
+    
+    if (isForgotPasswordMode) {
+        isForgotPasswordMode = false;
+        isLoginMode = true;
+        // Show password group
+        document.getElementById('auth-password').closest('.input-group').style.display = 'block';
+        document.getElementById('auth-email').value = '';
+        document.getElementById('auth-password').value = '';
+    } else {
+        isLoginMode = !isLoginMode;
+    }
+    
     document.getElementById('auth-title').innerText = isLoginMode ? 'Welcome Back!' : 'Create an Account';
     document.getElementById('auth-subtitle').innerText = isLoginMode ? 'Sign in to access your buzzing reminders.' : 'Join PillsBee for buzzing reminders.';
     document.getElementById('auth-submit-btn').innerText = isLoginMode ? 'Login' : 'Sign Up';
@@ -212,11 +265,37 @@ async function handleEmailAuth(e) {
     const password = document.getElementById('auth-password').value;
     const errorDiv = document.getElementById('auth-error');
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!isRecoveryMode && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         errorDiv.innerText = 'Invalid email';
         errorDiv.style.display = 'block';
         return;
     }
+
+    if (isForgotPasswordMode) {
+        errorDiv.style.display = 'none';
+        const btn = document.getElementById('auth-submit-btn');
+        btn.innerText = 'Sending...';
+        btn.disabled = true;
+        
+        try {
+            const { error } = await db.auth.resetPasswordForEmail(email, {
+                redirectTo: window.location.origin + window.location.pathname
+            });
+            if (error) throw error;
+            showToast('Password reset link sent! Please check your email inbox.', 'success');
+            isForgotPasswordMode = false;
+            isLoginMode = true;
+            toggleAuthMode();
+        } catch (err) {
+            errorDiv.innerText = err.message;
+            errorDiv.style.display = 'block';
+        } finally {
+            btn.innerText = 'Send Reset Link';
+            btn.disabled = false;
+        }
+        return;
+    }
+
     if (password.length < 6) {
         errorDiv.innerText = 'Password too short (min 6 characters)';
         errorDiv.style.display = 'block';
@@ -225,9 +304,41 @@ async function handleEmailAuth(e) {
 
     errorDiv.style.display = 'none';
     const btn = document.getElementById('auth-submit-btn');
-    btn.innerText = 'Please wait...';
     btn.disabled = true;
 
+    if (isRecoveryMode) {
+        btn.innerText = 'Updating...';
+        try {
+            const { error } = await db.auth.updateUser({ password: password });
+            if (error) throw error;
+            showToast('Password updated successfully! You can now log in.', 'success');
+            
+            isRecoveryMode = false;
+            isLoginMode = true;
+            
+            // Restore UI elements to normal login state
+            document.getElementById('auth-email').closest('.input-group').style.display = 'block';
+            const pwdGroup = document.getElementById('auth-password').closest('.input-group');
+            pwdGroup.querySelector('label').innerText = 'Password';
+            document.getElementById('auth-password').placeholder = '••••••••';
+            
+            document.getElementById('auth-divider').style.display = 'flex';
+            document.getElementById('google-login-btn').style.display = 'flex';
+            document.getElementById('auth-switch-text').style.display = 'inline';
+            document.getElementById('auth-switch-link').style.display = 'inline';
+            
+            toggleAuthMode();
+        } catch (err) {
+            errorDiv.innerText = err.message;
+            errorDiv.style.display = 'block';
+        } finally {
+            btn.innerText = 'Update Password';
+            btn.disabled = false;
+        }
+        return;
+    }
+
+    btn.innerText = 'Please wait...';
     try {
         if (isLoginMode) {
             const { error } = await db.auth.signInWithPassword({ email, password });
@@ -235,7 +346,7 @@ async function handleEmailAuth(e) {
         } else {
             const { error } = await db.auth.signUp({ email, password });
             if (error) throw error;
-            alert('Signup successful! Check your email to verify (or try logging in if auto-confirm is enabled).');
+            showToast('Signup successful! Check your email to verify (or try logging in if auto-confirm is enabled).', 'success');
             if (!isLoginMode) toggleAuthMode();
         }
     } catch (err) {
@@ -247,8 +358,54 @@ async function handleEmailAuth(e) {
     }
 }
 
-function handleForgotPassword() {
-    alert("Password reset functionality is not fully implemented yet.");
+function handleForgotPassword(e) {
+    if (e) e.preventDefault();
+    isForgotPasswordMode = true;
+    isLoginMode = false;
+    
+    document.getElementById('auth-title').innerText = 'Reset Password';
+    document.getElementById('auth-subtitle').innerText = 'Enter your email to receive a password reset link.';
+    
+    // Hide password field
+    document.getElementById('auth-password').closest('.input-group').style.display = 'none';
+    
+    document.getElementById('auth-submit-btn').innerText = 'Send Reset Link';
+    document.getElementById('auth-switch-text').innerText = 'Remember your password?';
+    document.getElementById('auth-switch-link').innerText = 'Login';
+    document.getElementById('forgot-password-link').style.display = 'none';
+    document.getElementById('auth-error').style.display = 'none';
+}
+
+function showRecoveryUI() {
+    authSection.classList.add('active');
+    dashboardSection.classList.remove('active');
+    chatbotSection.classList.remove('active');
+    addMedSection.classList.remove('active');
+    historySection.classList.remove('active');
+    mainNav.style.display = 'none';
+
+    document.getElementById('auth-title').innerText = 'Set New Password';
+    document.getElementById('auth-subtitle').innerText = 'Please enter your new password below.';
+    
+    // Hide email group
+    document.getElementById('auth-email').closest('.input-group').style.display = 'none';
+    
+    // Configure password group
+    const pwdGroup = document.getElementById('auth-password').closest('.input-group');
+    pwdGroup.style.display = 'block';
+    pwdGroup.querySelector('label').innerText = 'New Password';
+    document.getElementById('auth-password').value = '';
+    document.getElementById('auth-password').placeholder = 'Enter new password';
+    
+    document.getElementById('auth-submit-btn').innerText = 'Update Password';
+    
+    // Hide Google, divider, Switch text & links
+    document.getElementById('forgot-password-link').style.display = 'none';
+    document.getElementById('auth-divider').style.display = 'none';
+    document.getElementById('google-login-btn').style.display = 'none';
+    document.getElementById('auth-switch-text').style.display = 'none';
+    document.getElementById('auth-switch-link').style.display = 'none';
+    document.getElementById('auth-error').style.display = 'none';
 }
 
 async function handleGoogleLogin() {
@@ -260,7 +417,7 @@ async function handleGoogleLogin() {
     });
     if (error) {
         console.error('Login error:', error.message);
-        alert('Failed to sign in with Google: ' + error.message);
+        showToast('Failed to sign in with Google: ' + error.message, 'error');
     }
 }
 
@@ -533,7 +690,7 @@ async function deleteHistory(historyId) {
         loadHistory();
     } catch (err) {
         console.error('Error deleting history:', err.message);
-        alert('Failed to delete record: ' + err.message);
+        showToast('Failed to delete record: ' + err.message, 'error');
     }
 }
 
@@ -587,7 +744,7 @@ async function markAsTaken(medId) {
         todayHistory = todayHistory.filter(id => id !== medId);
         medicines[medIndex].remaining_quantity = oldQty;
         renderMedicines();
-        alert('Failed to save to server: ' + err.message);
+        showToast('Failed to save to server: ' + err.message, 'error');
     }
 }
 
@@ -715,7 +872,7 @@ async function processOCR(file) {
         document.getElementById('ocr-modal').style.display = 'block';
     } catch (e) {
         console.error('OCR Error:', e);
-        alert('Failed to scan prescription.');
+        showToast('Failed to scan prescription.', 'error');
     } finally {
         status.style.display = 'none';
     }
@@ -746,12 +903,15 @@ async function deleteMedicine(medId) {
         loadMedicines(currentUser.id);
     } catch (err) {
         console.error('Error deleting medicine:', err.message);
-        alert('Failed to delete: ' + err.message);
+        showToast('Failed to delete: ' + err.message, 'error');
     }
 }
 
 async function handleAddMedicine() {
-    if (!currentUser) return alert('Please login first');
+    if (!currentUser) {
+        showToast('Please login first', 'error');
+        return;
+    }
 
     const name = document.getElementById('med-name').value;
     const dosage = document.getElementById('med-dosage').value;
@@ -763,29 +923,34 @@ async function handleAddMedicine() {
     const timeInputs = document.querySelectorAll('.med-time-input');
     const times = Array.from(timeInputs).map(input => input.value).filter(t => t);
 
-    if (!name || times.length === 0 || !qty) return alert('Please fill in Name, at least one Time, and Quantity.');
+    if (!name || times.length === 0 || !qty) {
+        showToast('Please fill in Name, at least one Time, and Quantity.', 'error');
+        return;
+    }
 
-    const { error } = await db.from('medicines').insert({
-        user_id: currentUser.id,
-        name,
-        dosage,
-        frequency,
-        time: times.join(', '), // Store as comma-separated string
-        total_quantity: qty,
-        remaining_quantity: qty,
-        expiry_date: expiry || null,
-        voice_enabled: voiceEnabled
-    });
+    try {
+        const { error } = await db.from('medicines').insert({
+            user_id: currentUser.id,
+            name,
+            dosage,
+            frequency,
+            time: times.join(', '), // Store as comma-separated string
+            total_quantity: qty,
+            remaining_quantity: qty,
+            expiry_date: expiry || null,
+            voice_enabled: voiceEnabled
+        });
 
-    if (error) {
-        alert('Error: ' + error.message);
-    } else {
+        if (error) throw error;
+
         switchTab('dashboard');
         loadMedicines(currentUser.id);
         // Reset form
         document.getElementById('med-name').value = '';
         document.getElementById('med-dosage').value = '';
         document.getElementById('time-slots-container').innerHTML = '<input type="time" class="med-time-input glass" style="width:100%; padding:14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); margin-bottom:8px; background:transparent; color:inherit;">';
+    } catch (error) {
+        showToast('Error: ' + error.message, 'error');
     }
 }
 
@@ -855,10 +1020,10 @@ async function clearChatHistory() {
         if (error) throw error;
 
         chatMessages.innerHTML = '<div class="message bot">History cleared. How can I help you today?</div>';
-        alert('Chat history cleared successfully.');
+        showToast('Chat history cleared successfully.', 'success');
     } catch (err) {
         console.error('Error clearing history:', err.message);
-        alert('Failed to clear history.');
+        showToast('Failed to clear history.', 'error');
     }
 }
 
@@ -890,6 +1055,10 @@ async function loadChatHistory() {
 }
 
 async function handleChat() {
+    if (!currentUser) {
+        showToast('Please log in to chat.', 'error');
+        return;
+    }
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
     if (!text) return;
