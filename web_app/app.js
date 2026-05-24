@@ -1,8 +1,21 @@
 // Configuration
 const SUPABASE_URL = 'https://ceupmimkixpqjitoxmgx.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNldXBtaW1raXhwcWppdG94bWd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyNjEyODQsImV4cCI6MjA5MjgzNzI4NH0.eoCq0NjqQnGpgn_rpSLnZ_4jD0KV8YP3zBOUrvyklxY';
-const GROQ_API_KEY = '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';
 
+function getGroqKey() {
+    return localStorage.getItem('groq_api_key') || '';
+}
+
+function saveGroqKey() {
+    const key = document.getElementById('settings-groq-key').value.trim();
+    if (key) {
+        localStorage.setItem('groq_api_key', key);
+        showToast('Groq API Key saved securely in your browser.', 'success');
+    } else {
+        localStorage.removeItem('groq_api_key');
+        showToast('Groq API Key removed.', 'info');
+    }
+}
 // Global State
 let splashCompleted = false;
 let currentUser = null;
@@ -151,6 +164,12 @@ async function initApp() {
 
     const { data: { session } } = await db.auth.getSession();
     currentUser = session ? session.user : null;
+
+    // Load existing Groq key to settings UI
+    const groqKeyInput = document.getElementById('settings-groq-key');
+    if (groqKeyInput && getGroqKey()) {
+        groqKeyInput.value = getGroqKey();
+    }
 
     db.auth.onAuthStateChange((event, session) => {
         currentUser = session ? session.user : null;
@@ -482,6 +501,11 @@ async function showMedicineInfo(medId) {
 
     // AI Fetching Logic using Groq
     try {
+        const apiKey = getGroqKey();
+        if (!apiKey) {
+            throw new Error("Please set your Groq API Key in Settings first.");
+        }
+
         const prompt = `Provide medical information for "${med.name}" in a strictly valid JSON format. 
         Structure: { 
             "usage": "Brief explanation of what this medicine is used for", 
@@ -494,7 +518,7 @@ async function showMedicineInfo(medId) {
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${GROQ_API_KEY}`,
+                'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
@@ -503,6 +527,11 @@ async function showMedicineInfo(medId) {
                 response_format: { type: "json_object" }
             })
         });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error?.message || "API request failed");
+        }
 
         const resData = await response.json();
         const content = JSON.parse(resData.choices[0].message.content);
@@ -1094,11 +1123,16 @@ async function handleChat() {
     const loadingEl = document.getElementById(loadingId);
 
     try {
+        const apiKey = getGroqKey();
+        if (!apiKey) {
+            throw new Error("API Key missing. Please set your Groq API Key in Settings.");
+        }
+
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${GROQ_API_KEY}`
+                'Authorization': `Bearer ${apiKey}`
             },
             body: JSON.stringify({
                 model: 'llama-3.1-8b-instant',
